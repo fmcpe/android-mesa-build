@@ -76,7 +76,8 @@ jobs:
             -Dllvm=disabled \
             -Dopengl=true \
             -Dvulkan-drivers= \
-            -Dbuild-drm-shim=false \
+            -Ddrm-shim=disabled \
+            -Dbuild-tests=false \
             -Dgallium-drivers=zink,freedreno \
             -Dfreedreno-kmds=kgsl,msm \
             -Dbuildtype=release
