@@ -75,7 +75,7 @@ jobs:
             -Dglx=disabled \
             -Dllvm=disabled \
             -Dopengl=true \
-            -Dosmesa=true \
+            -Dosmesa=false \
             -Dvulkan-drivers= \
             -Dtools=drm-shim \
             -Dgallium-drivers=zink,freedreno \
