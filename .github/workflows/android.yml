@@ -89,7 +89,6 @@ jobs:
             -Dshared-glapi=enabled \
             -Dllvm=disabled \
             -Dglx=disabled \
-            -Dosmesa=false \
             -Dbuildtype=release \
             -Db_lto=false
 
