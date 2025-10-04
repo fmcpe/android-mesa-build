@@ -83,10 +83,9 @@ jobs:
             -Dgallium-drivers=freedreno \
             -Dvulkan-drivers= \
             -Dopengl=true \
-            -Degl=enabled \
-            -Dgles1=enabled \
-            -Dgles2=enabled \
-            -Dshared-glapi=enabled \
+            -Degl=disabled \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
             -Dllvm=disabled \
             -Dglx=disabled \
             -Dbuildtype=release \
