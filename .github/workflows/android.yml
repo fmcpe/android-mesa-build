@@ -45,12 +45,10 @@ jobs:
           unzip -q ndk.zip
           mv android-ndk-${NDK_VER} ${{ env.NDK_PATH }}
 
-      - name: Clone and checkout Mesa
+      - name: Clone Mesa
         run: |
-          git clone https://gitlab.freedesktop.org/mesa/mesa.git
-          cd mesa
-          git checkout ${{ env.MESA_VERSION }}
-
+          git clone --branch ${{ env.MESA_VERSION }} --single-branch https://gitlab.freedesktop.org/mesa/mesa.git
+          
       - name: Create cross file
         run: |
           cat > crossfile.txt << 'EOF'
