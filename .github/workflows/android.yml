@@ -17,7 +17,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y libxrandr-dev libxxf86vm-dev libxcb-* libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev
+          sudo apt install -y \
+            libxrandr-dev \
+            libxxf86vm-dev \
+            libxcb-* \
+            libx11-xcb-dev \
+            libxfixes-dev \
+            libdrm-dev \
+            libx11-dev \
+            clang \
+            python3-pip \
+            libc6-dev \
+            git
           pip3 install mako meson ninja
 
       - name: Set environment variables
@@ -33,21 +44,20 @@ jobs:
           git clone https://gitlab.freedesktop.org/mesa/drm.git
           git clone https://gitlab.freedesktop.org/mesa/mesa.git
 
-      - name: Patch Mesa to include NEON support in BLAKE3
+      - name: Apply patch for ARM64 NEON support
         run: |
-          echo "Applying patch to include blake3_neon.S"
           cd mesa
           git apply << 'EOF'
           diff --git a/src/util/blake3/meson.build b/src/util/blake3/meson.build
           index abcdef0..1234567 100644
           --- a/src/util/blake3/meson.build
           +++ b/src/util/blake3/meson.build
-          @@
-             blake3_files = files(
-               'blake3.c',
-               'blake3_dispatch.c',
-               'blake3_portable.c',
-             )
+          @@ -1,6 +1,9 @@
+           blake3_files = files(
+             'blake3.c',
+             'blake3_dispatch.c',
+             'blake3_portable.c',
+           )
           +
           +if host_machine.cpu_family() == 'aarch64'
           +  blake3_files += files('blake3_neon.S')
@@ -95,12 +105,17 @@ jobs:
             -Dopengl=true \
             -Dvulkan-drivers="" \
             -Dgallium-drivers=freedreno \
-            -Dfreedreno-kmds=kgsl \
+            -Dfreedreno-kmds=kgsl,msm \
             -Dbuildtype=release
           ninja -C build-android install
+
+      - name: Verify built libraries
+        run: |
+          ls -l /tmp/mesa/lib/
+          ls -l /tmp/mesa/lib64/
 
       - name: Upload built libraries
         uses: actions/upload-artifact@v4
         with:
           name: Mesa_${{ matrix.arch }}
-          path: /tmp/mesa/lib/*
+          path: /tmp/mesa/lib/*,/tmp/mesa/lib64/*
