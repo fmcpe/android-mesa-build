@@ -26,7 +26,7 @@ jobs:
           echo "SDK_VER=29" >> $GITHUB_ENV
           echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
 
-      - name: Download NDK & clone Mesa and DRM
+      - name: Download NDK & clone Mesa / DRM
         run: |
           curl -L https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
           unzip ${NDK_VER}-linux.zip
@@ -35,10 +35,11 @@ jobs:
 
       - name: Patch Mesa to include NEON support in BLAKE3
         run: |
-          # This patch ensures blake3_neon.S is compiled on aarch64
-          apply_patch<< 'EOF'
+          echo "Applying patch to include blake3_neon.S"
+          cd mesa
+          git apply << 'EOF'
           diff --git a/src/util/blake3/meson.build b/src/util/blake3/meson.build
-          index 1234567..89abcde 100644
+          index abcdef0..1234567 100644
           --- a/src/util/blake3/meson.build
           +++ b/src/util/blake3/meson.build
           @@
@@ -52,6 +53,7 @@ jobs:
           +  blake3_files += files('blake3_neon.S')
           +endif
           EOF
+          cd ..
 
       - name: Build DRM (Freedreno dependency)
         run: |
@@ -93,7 +95,7 @@ jobs:
             -Dopengl=true \
             -Dvulkan-drivers="" \
             -Dgallium-drivers=freedreno \
-            -Dfreedreno-kmds=kgsl,msm \
+            -Dfreedreno-kmds=kgsl \
             -Dbuildtype=release
           ninja -C build-android install
 
@@ -102,4 +104,3 @@ jobs:
         with:
           name: Mesa_${{ matrix.arch }}
           path: /tmp/mesa/lib/*
-
