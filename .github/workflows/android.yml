@@ -36,7 +36,6 @@ jobs:
         run: |
           echo "NDK_PATH=${{ github.workspace }}/android-ndk" >> $GITHUB_ENV
           echo "API_LEVEL=33" >> $GITHUB_ENV
-          echo "MESA_VERSION=23.3.0" >> $GITHUB_ENV
 
       - name: Download NDK
         run: |
@@ -47,7 +46,7 @@ jobs:
 
       - name: Clone Mesa
         run: |
-          git clone --branch ${{ env.MESA_VERSION }} --single-branch https://gitlab.freedesktop.org/mesa/mesa.git
+          git clone --single-branch https://gitlab.freedesktop.org/mesa/mesa.git
           
       - name: Create cross file
         run: |
