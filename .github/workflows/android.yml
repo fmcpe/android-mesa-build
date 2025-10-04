@@ -29,13 +29,17 @@ jobs:
             libdrm-dev \
             libexpat1-dev \
             libz-dev \
-            ccache
+            ccache \
+            libssl-dev \
+            libxml2-dev \
+            zlib1g-dev
           pip3 install mako meson ninja
 
       - name: Set environment variables
         run: |
           echo "NDK_PATH=${{ github.workspace }}/android-ndk" >> $GITHUB_ENV
           echo "API_LEVEL=33" >> $GITHUB_ENV
+          echo "MESA_SRC_DIR=${{ github.workspace }}/mesa" >> $GITHUB_ENV
 
       - name: Download NDK
         run: |
@@ -46,29 +50,34 @@ jobs:
 
       - name: Clone Mesa
         run: |
-          git clone --single-branch https://gitlab.freedesktop.org/mesa/mesa.git
-          
+          git clone https://gitlab.freedesktop.org/mesa/mesa.git
+
+      - name: Build OpenSSL for Android
+        run: |
+          cd mesa
+          ./scripts/install-android-openssl.sh
+
       - name: Create cross file
         run: |
-          cat > crossfile.txt << 'EOF'
+          cat > crossfile.txt << EOF
           [binaries]
           c = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang'
           cpp = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang++'
           ar = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
           strip = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkgconfig = 'pkg-config'
-
-          [properties]
-          c_args = ['-Wno-error=implicit-function-declaration']
-          cpp_args = ['-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-          c_link_args = []
-          cpp_link_args = ['-static-libstdc++']
+          pkg-config = 'pkg-config'
 
           [host_machine]
           system = 'android'
           cpu_family = 'aarch64'
           cpu = 'armv8'
           endian = 'little'
+
+          [built-in options]
+          c_args = ['-Wno-error=implicit-function-declaration', '-I${{ env.MESA_SRC_DIR }}/subprojects/openssl/include']
+          cpp_args = ['-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++', '-I${{ env.MESA_SRC_DIR }}/subprojects/openssl/include']
+          c_link_args = ['-L${{ env.MESA_SRC_DIR }}/subprojects/openssl/lib/arm64-v8a']
+          cpp_link_args = ['-static-libstdc++', '-L${{ env.MESA_SRC_DIR }}/subprojects/openssl/lib/arm64-v8a']
           EOF
 
       - name: Build Mesa for Android
@@ -86,6 +95,7 @@ jobs:
             -Degl=disabled \
             -Dgles1=disabled \
             -Dgles2=disabled \
+            -Dshared-glapi=disabled \
             -Dllvm=disabled \
             -Dglx=disabled \
             -Dbuildtype=release \
@@ -96,11 +106,17 @@ jobs:
 
       - name: Verify built libraries
         run: |
-          find /tmp/mesa-install -type f -name "*.so" -o -name "*.a" | head -20
-          ls -la /tmp/mesa-install/lib/
+          echo "=== Built libraries ==="
+          find /tmp/mesa-install -name "*.so" -o -name "*.a" | head -20
+          echo "=== Library directory contents ==="
+          ls -la /tmp/mesa-install/lib/ || echo "lib/ directory not found"
+          ls -la /tmp/mesa-install/lib64/ || echo "lib64/ directory not found"
 
       - name: Upload built libraries
         uses: actions/upload-artifact@v4
         with:
           name: Mesa_Android_${{ matrix.arch }}
-          path: /tmp/mesa-install/
+          path: |
+            /tmp/mesa-install/lib/
+            /tmp/mesa-install/lib64/
+          if-no-files-found: error
