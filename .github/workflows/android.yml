@@ -22,13 +22,21 @@ jobs:
             python3-pip \
             python3-packaging \
             pkg-config \
-            flex bison
+            flex bison \
+            gettext \
+            libwayland-dev \
+            wayland-protocols \
+            libdrm-dev \
+            libexpat1-dev \
+            libz-dev \
+            ccache
           pip3 install mako meson ninja
 
       - name: Set environment variables
         run: |
           echo "NDK_PATH=${{ github.workspace }}/android-ndk" >> $GITHUB_ENV
-          echo "API_LEVEL=34" >> $GITHUB_ENV
+          echo "API_LEVEL=33" >> $GITHUB_ENV
+          echo "MESA_VERSION=23.3.0" >> $GITHUB_ENV
 
       - name: Download NDK
         run: |
@@ -37,16 +45,27 @@ jobs:
           unzip -q ndk.zip
           mv android-ndk-${NDK_VER} ${{ env.NDK_PATH }}
 
-      - name: Create cross file for ${{ matrix.arch }}
+      - name: Clone and checkout Mesa
         run: |
-          cat > crossfile.txt << EOF
+          git clone https://gitlab.freedesktop.org/mesa/mesa.git
+          cd mesa
+          git checkout ${{ env.MESA_VERSION }}
+
+      - name: Create cross file
+        run: |
+          cat > crossfile.txt << 'EOF'
           [binaries]
-          c = ['ccache', '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang']
-          cpp = ['ccache', '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-          ar = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar'
-          c_ld = 'lld'
-          cpp_ld = 'lld'
-          strip = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip'
+          c = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang'
+          cpp = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang++'
+          ar = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkgconfig = 'pkg-config'
+
+          [properties]
+          c_args = ['-Wno-error=implicit-function-declaration']
+          cpp_args = ['-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+          c_link_args = []
+          cpp_link_args = ['-static-libstdc++']
 
           [host_machine]
           system = 'android'
@@ -54,12 +73,6 @@ jobs:
           cpu = 'armv8'
           endian = 'little'
           EOF
-
-      - name: Clone Mesa
-        run: |
-          git clone https://gitlab.freedesktop.org/mesa/mesa.git
-          cd mesa
-          git checkout $(git tag -l '*.0' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | tail -n1)
 
       - name: Build Mesa for Android
         run: |
@@ -78,10 +91,18 @@ jobs:
             -Dgles2=enabled \
             -Dshared-glapi=enabled \
             -Dllvm=disabled \
-            -Dbuildtype=release
+            -Dglx=disabled \
+            -Dosmesa=false \
+            -Dbuildtype=release \
+            -Db_lto=false
 
           meson compile -C build-android
           meson install -C build-android
+
+      - name: Verify built libraries
+        run: |
+          find /tmp/mesa-install -type f -name "*.so" -o -name "*.a" | head -20
+          ls -la /tmp/mesa-install/lib/
 
       - name: Upload built libraries
         uses: actions/upload-artifact@v4
