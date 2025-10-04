@@ -43,28 +43,7 @@ jobs:
           unzip ${NDK_VER}-linux.zip
           git clone https://gitlab.freedesktop.org/mesa/drm.git
           git clone https://gitlab.freedesktop.org/mesa/mesa.git
-
-      - name: Apply patch for ARM64 NEON support
-        run: |
-          cd mesa
-          git apply << 'EOF'
-          diff --git a/src/util/blake3/meson.build b/src/util/blake3/meson.build
-          index abcdef0..1234567 100644
-          --- a/src/util/blake3/meson.build
-          +++ b/src/util/blake3/meson.build
-          @@ -1,6 +1,9 @@
-           blake3_files = files(
-             'blake3.c',
-             'blake3_dispatch.c',
-             'blake3_portable.c',
-           )
-          +
-          +if host_machine.cpu_family() == 'aarch64'
-          +  blake3_files += files('blake3_neon.S')
-          +endif
-          EOF
-          cd ..
-
+          
       - name: Build DRM (Freedreno dependency)
         run: |
           envsubst < android-drm-${{ matrix.arch }} > build-crossfile-drm
