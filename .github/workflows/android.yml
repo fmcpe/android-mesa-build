@@ -7,7 +7,7 @@ jobs:
   build:
     strategy:
       matrix:
-        arch: [ "arm32", "aarch64", "x86_64" ]
+        arch: [ "aarch64" ]
       fail-fast: false
     name: Build for ${{ matrix.arch }}
     runs-on: ubuntu-latest
@@ -18,83 +18,73 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            libxrandr-dev \
-            libxxf86vm-dev \
-            libxcb-* \
-            libx11-xcb-dev \
-            libxfixes-dev \
-            libdrm-dev \
-            libx11-dev \
             clang \
             python3-pip \
-            libc6-dev \
-            git
+            python3-packaging \
+            pkg-config \
+            flex bison
           pip3 install mako meson ninja
 
       - name: Set environment variables
         run: |
-          echo "NDK_VER=android-ndk-r27c" >> $GITHUB_ENV
-          echo "SDK_VER=29" >> $GITHUB_ENV
-          echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "NDK_PATH=${{ github.workspace }}/android-ndk" >> $GITHUB_ENV
+          echo "API_LEVEL=34" >> $GITHUB_ENV
 
-      - name: Download NDK & clone Mesa / DRM
+      - name: Download NDK
         run: |
-          curl -L https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
-          unzip ${NDK_VER}-linux.zip
-          git clone https://gitlab.freedesktop.org/mesa/drm.git
+          NDK_VER="r27c"
+          curl -L "https://dl.google.com/android/repository/android-ndk-${NDK_VER}-linux.zip" -o ndk.zip
+          unzip -q ndk.zip
+          mv android-ndk-${NDK_VER} ${{ env.NDK_PATH }}
+
+      - name: Create cross file for ${{ matrix.arch }}
+        run: |
+          cat > crossfile.txt << EOF
+          [binaries]
+          c = ['ccache', '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang']
+          cpp = ['ccache', '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+          ar = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar'
+          c_ld = 'lld'
+          cpp_ld = 'lld'
+          strip = '${{ env.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip'
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8'
+          endian = 'little'
+          EOF
+
+      - name: Clone Mesa
+        run: |
           git clone https://gitlab.freedesktop.org/mesa/mesa.git
-          
-      - name: Build DRM (Freedreno dependency)
-        run: |
-          envsubst < android-drm-${{ matrix.arch }} > build-crossfile-drm
-          cd drm
-          meson setup build-android \
-            --prefix=/tmp/drm-static \
-            --cross-file ../build-crossfile-drm \
-            -Ddefault_library=static \
-            -Dintel=disabled \
-            -Dradeon=disabled \
-            -Damdgpu=disabled \
-            -Dnouveau=disabled \
-            -Dvmwgfx=disabled \
-            -Dfreedreno=enabled \
-            -Dvc4=disabled \
-            -Detnaviv=disabled \
-            -Dfreedreno-kgsl=true
-          ninja -C build-android install
-          cd ..
+          cd mesa
+          git checkout $(git tag -l '*.0' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | tail -n1)
 
       - name: Build Mesa for Android
         run: |
-          envsubst < android-${{ matrix.arch }} > build-crossfile
           cd mesa
           meson setup build-android \
-            --prefix=/tmp/mesa \
-            --cross-file ../build-crossfile \
+            --cross-file ../crossfile.txt \
+            --prefix=/tmp/mesa-install \
             -Dplatforms=android \
-            -Dplatform-sdk-version=33 \
+            -Dplatform-sdk-version=${{ env.API_LEVEL }} \
             -Dandroid-stub=true \
-            -Dandroid-libbacktrace=false \
-            -Dandroid-strict=false \
-            -Dxlib-lease=disabled \
-            -Degl=disabled \
-            -Dgbm=disabled \
-            -Dglx=disabled \
-            -Dllvm=disabled \
-            -Dopengl=true \
-            -Dvulkan-drivers="" \
             -Dgallium-drivers=freedreno \
-            -Dfreedreno-kmds=kgsl,msm \
+            -Dvulkan-drivers= \
+            -Dopengl=true \
+            -Degl=enabled \
+            -Dgles1=enabled \
+            -Dgles2=enabled \
+            -Dshared-glapi=enabled \
+            -Dllvm=disabled \
             -Dbuildtype=release
-          ninja -C build-android install
 
-      - name: Verify built libraries
-        run: |
-          ls -l /tmp/mesa/lib/
-          ls -l /tmp/mesa/lib64/
+          meson compile -C build-android
+          meson install -C build-android
 
       - name: Upload built libraries
         uses: actions/upload-artifact@v4
         with:
-          name: Mesa_${{ matrix.arch }}
-          path: /tmp/mesa/lib/*,/tmp/mesa/lib64/*
+          name: Mesa_Android_${{ matrix.arch }}
+          path: /tmp/mesa-install/
